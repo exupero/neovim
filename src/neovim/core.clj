@@ -1,18 +1,29 @@
 (ns neovim.core
   (:refer-clojure :exclude [eval])
   (:require [clojure.string :as string]
+            [clojure.walk :refer [prewalk-replace]]
             [neovim-client.nvim :as nvim]
             [neovim-client.1.api :as api]))
 
-(defn exec [client [op args]]
-  (apply nvim/exec client op args))
-
 (defn exec-atomic [client calls]
-  (api/call-atomic client calls))
+  (if-let [deps (seq (into #{}
+                           (mapcat (fn [[op args]]
+                                     (filter #(-> % meta :nvim-call) args)))
+                           calls))]
+    (let [[values err] (exec-atomic client deps)]
+      (if err
+        [values err]
+        (api/call-atomic client (prewalk-replace (zipmap deps values) calls))))
+    (api/call-atomic client calls)))
+
+(defn exec [client call]
+  (if (vector? (first call))
+    (first (exec-atomic client call))
+    (ffirst (exec-atomic client [call]))))
 
 (defmacro defcall [nm args]
   `(defn ~nm ~args
-     [~(str "nvim_" (string/replace (name nm) "-" "_")) ~args]))
+     ^:nvim-call [~(str "nvim_" (string/replace (name nm) "-" "_")) ~args]))
 
 (defcall command [command])
 (defcall get-hl-by-name [name rgb])
