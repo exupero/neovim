@@ -5,10 +5,20 @@
             [neovim-client.nvim :as nvim]
             [neovim-client.1.api :as api]))
 
+(defn client [& args]
+  (apply nvim/new args))
+
+(defn call? [x]
+  (:nvim-call (meta x)))
+
+(defn flatten-calls [calls]
+  (let [f #(and (seq %) (not (call? %)))]
+    (filter (complement f) (tree-seq f seq calls))))
+
 (defn exec-atomic [client calls]
   (if-let [deps (seq (into #{}
-                           (mapcat (fn [[op args]]
-                                     (filter #(-> % meta :nvim-call) args)))
+                           (mapcat (fn [[_ args]]
+                                     (filter call? args)))
                            calls))]
     (let [[values err] (exec-atomic client deps)]
       (if err
@@ -16,10 +26,10 @@
         (api/call-atomic client (prewalk-replace (zipmap deps values) calls))))
     (api/call-atomic client calls)))
 
-(defn exec [client call]
-  (if (vector? (first call))
-    (first (exec-atomic client call))
-    (ffirst (exec-atomic client [call]))))
+(defn exec [client call-or-calls]
+  (if (call? call-or-calls)
+    (ffirst (exec-atomic client [call-or-calls]))
+    (first (exec-atomic client (flatten-calls call-or-calls)))))
 
 (defmacro defcall [nm args]
   `(defn ~nm ~args
