@@ -1,7 +1,7 @@
 (ns neovim.core
   (:refer-clojure :exclude [eval])
   (:require [clojure.string :as string]
-            [clojure.walk :refer [prewalk-replace]]
+            [clojure.walk :refer [prewalk-replace prewalk]]
             [neovim-client.nvim :as nvim]
             [neovim-client.1.api :as api]))
 
@@ -26,10 +26,24 @@
         (api/call-atomic client (prewalk-replace (zipmap deps values) calls))))
     (api/call-atomic client calls)))
 
+(defn structure-results [calls results]
+  (let [results (atom results)]
+    (prewalk
+      (fn [node]
+        (if (call? node)
+          (let [[x] @results]
+            (swap! results rest)
+            x)
+          node))
+      calls)))
+
 (defn exec [client call-or-calls]
   (if (call? call-or-calls)
     (ffirst (exec-atomic client [call-or-calls]))
-    (first (exec-atomic client (flatten-calls call-or-calls)))))
+    (->> (flatten-calls call-or-calls)
+      (exec-atomic client)
+      first
+      (structure-results call-or-calls))))
 
 (defmacro defcall [nm args]
   `(defn ~nm ~args

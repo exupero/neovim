@@ -1,4 +1,4 @@
-(defproject org.exupero/neovim "0.1.0"
+(defproject org.exupero/neovim "0.1.1-SNAPSHOT"
   :description "Clojure API for Neovim"
   :url "https://github.com/exupero/neovim"
   :license {:name "Eclipse Public License"
